@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Project Pulse</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#project-dashboard">Skip to project dashboard</a>
+
+    <header class="page-header">
+      <div class="header-inner">
+        <p class="eyebrow">Team delivery dashboard</p>
+        <h1 class="page-title">Project Pulse</h1>
+        <p class="page-description">
+          A live snapshot of project ownership, status, recent activity, and priority loaded from
+          <span class="data-source">project-data.json</span>.
+        </p>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section aria-labelledby="dashboard-title">
+        <h2 class="dashboard-heading" id="dashboard-title">Current project health</h2>
+        <p class="dashboard-summary" id="dashboard-summary">
+          Loading project records from the shared data source.
+        </p>
+        <div
+          class="dashboard"
+          id="project-dashboard"
+          tabindex="-1"
+          aria-busy="true"
+          aria-describedby="dashboard-summary"
+        ></div>
+      </section>
+    </main>
+
+    <noscript>
+      <section class="dashboard-state state state--error error-state" role="alert">
+        <span class="state__icon" aria-hidden="true">!</span>
+        <h2 class="state__title">JavaScript is required</h2>
+        <p class="state__message">
+          Project Pulse fetches project-data.json over HTTP and needs JavaScript enabled to render
+          the dashboard.
+        </p>
+      </section>
+    </noscript>
+
+    <script>
+      const DATA_URL = "project-data.json";
+      const STATE_CLASSES = {
+        loading: "dashboard-state state state--loading loading-state",
+        error: "dashboard-state state state--error error-state",
+        invalid: "dashboard-state state state--invalid invalid-state",
+        empty: "dashboard-state state state--empty empty-state"
+      };
+      const KNOWN_STATUSES = new Set([
+        "active",
+        "in-progress",
+        "planning",
+        "blocked",
+        "complete",
+        "completed",
+        "paused"
+      ]);
+      const KNOWN_PRIORITIES = new Set(["critical", "high", "medium", "low"]);
+
+      const dashboard = document.querySelector("#project-dashboard");
+      const dashboardSummary = document.querySelector("#dashboard-summary");
+
+      function normalizeToken(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+      }
+
+      function readableValue(value, fallback) {
+        const text = typeof value === "string" ? value.trim() : "";
+        return text || fallback;
+      }
+
+      function ownerInitials(ownerName) {
+        const fallback = "?";
+        const words = readableValue(ownerName, "")
+          .split(/\s+/)
+          .filter(Boolean);
+
+        if (words.length === 0) {
+          return fallback;
+        }
+
+        return words
+          .slice(0, 2)
+          .map((word) => word.charAt(0).toUpperCase())
+          .join("");
+      }
+
+      function clearDashboard() {
+        dashboard.replaceChildren();
+      }
+
+      function setSummary(message) {
+        dashboardSummary.textContent = message;
+      }
+
+      function createState({ type, icon, title, message, role }) {
+        clearDashboard();
+        dashboard.setAttribute("aria-busy", "false");
+
+        const state = document.createElement("div");
+        state.className = STATE_CLASSES[type] || "dashboard-state state";
+        if (role) {
+          state.setAttribute("role", role);
+        }
+        state.setAttribute("aria-live", type === "error" || type === "invalid" ? "assertive" : "polite");
+
+        const stateIcon = document.createElement("span");
+        stateIcon.className = "state__icon";
+        stateIcon.setAttribute("aria-hidden", "true");
+        stateIcon.textContent = icon;
+
+        const stateTitle = document.createElement("h3");
+        stateTitle.className = "state__title";
+        stateTitle.textContent = title;
+
+        const stateMessage = document.createElement("p");
+        stateMessage.className = "state__message";
+        stateMessage.textContent = message;
+
+        if (type === "loading") {
+          const spinner = document.createElement("span");
+          spinner.className = "loading-spinner";
+          spinner.setAttribute("aria-hidden", "true");
+          state.append(spinner);
+        } else {
+          state.append(stateIcon);
+        }
+
+        state.append(stateTitle, stateMessage);
+        dashboard.append(state);
+      }
+
+      function showLoading() {
+        dashboard.setAttribute("aria-busy", "true");
+        setSummary("Loading project records from the shared data source.");
+        createState({
+          type: "loading",
+          icon: "…",
+          title: "Loading projects",
+          message: "Fetching project-data.json over HTTP.",
+          role: "status"
+        });
+        dashboard.setAttribute("aria-busy", "true");
+      }
+
+      function showFetchError(error) {
+        const detail = error && error.message ? ` ${error.message}` : "";
+        setSummary("Project records could not be loaded.");
+        createState({
+          type: "error",
+          icon: "!",
+          title: "Unable to load project data",
+          message: `Check that the HTTP server is running and project-data.json is valid JSON.${detail}`,
+          role: "alert"
+        });
+      }
+
+      function showInvalidData() {
+        setSummary("Project data loaded, but it does not match the required shape.");
+        createState({
+          type: "invalid",
+          icon: "?",
+          title: "Invalid project data",
+          message: "The data file must contain a top-level projects array.",
+          role: "alert"
+        });
+      }
+
+      function showEmptyState() {
+        setSummary("No project records are available.");
+        createState({
+          type: "empty",
+          icon: "0",
+          title: "No projects to show",
+          message: "Add project records to project-data.json to populate the dashboard.",
+          role: "status"
+        });
+      }
+
+      function createBadge({ label, value, type, knownValues }) {
+        const normalizedValue = normalizeToken(value);
+        const safeToken = knownValues.has(normalizedValue) ? normalizedValue : "unknown";
+
+        const badge = document.createElement("span");
+        badge.className = `badge ${type}-badge ${type}--${safeToken}`;
+        badge.dataset[type] = safeToken;
+        badge.setAttribute("aria-label", `${label}: ${value}`);
+
+        const marker = document.createElement("span");
+        marker.className = "badge-marker";
+        marker.setAttribute("aria-hidden", "true");
+
+        const text = document.createElement("span");
+        text.textContent = `${label}: ${value}`;
+
+        badge.append(marker, text);
+        return { badge, safeToken };
+      }
+
+      function appendMetaItem(list, label, value, valueClassName) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "meta-item";
+
+        const term = document.createElement("dt");
+        term.className = "meta-label";
+        term.textContent = label;
+
+        const description = document.createElement("dd");
+        description.className = `meta-value ${valueClassName || ""}`.trim();
+        description.textContent = value;
+
+        wrapper.append(term, description);
+        list.append(wrapper);
+      }
+
+      function createProjectCard(project) {
+        const name = readableValue(project.name, "Untitled project");
+        const owner = readableValue(project.owner, "Owner not assigned");
+        const status = readableValue(project.status, "Status not provided");
+        const recentActivity = readableValue(project.recentActivity, "No recent activity recorded.");
+        const priority = readableValue(project.priority, "Priority not provided");
+
+        const priorityToken = normalizeToken(priority);
+        const safePriorityToken = KNOWN_PRIORITIES.has(priorityToken) ? priorityToken : "unknown";
+
+        const article = document.createElement("article");
+        article.className = `project-card priority--${safePriorityToken}`;
+        article.dataset.priority = safePriorityToken;
+
+        const header = document.createElement("div");
+        header.className = "project-card__header card-header";
+
+        const title = document.createElement("h3");
+        title.className = "project-card__title project-name";
+        title.textContent = name;
+
+        const badges = document.createElement("div");
+        badges.className = "badges project-badges";
+        badges.setAttribute("aria-label", "Project status and priority");
+
+        const statusBadge = createBadge({
+          label: "Status",
+          value: status,
+          type: "status",
+          knownValues: KNOWN_STATUSES
+        }).badge;
+        const priorityBadge = createBadge({
+          label: "Priority",
+          value: priority,
+          type: "priority",
+          knownValues: KNOWN_PRIORITIES
+        }).badge;
+
+        badges.append(statusBadge, priorityBadge);
+        header.append(title, badges);
+
+        const meta = document.createElement("dl");
+        meta.className = "project-card__meta project-meta";
+
+        const ownerWrapper = document.createElement("div");
+        ownerWrapper.className = "meta-item";
+
+        const ownerTerm = document.createElement("dt");
+        ownerTerm.className = "meta-label";
+        ownerTerm.textContent = "Owner";
+
+        const ownerDescription = document.createElement("dd");
+        ownerDescription.className = "meta-value owner project-owner";
+
+        const ownerAvatar = document.createElement("span");
+        ownerAvatar.className = "owner-avatar";
+        ownerAvatar.setAttribute("aria-hidden", "true");
+        ownerAvatar.textContent = ownerInitials(owner);
+
+        const ownerText = document.createElement("span");
+        ownerText.textContent = owner;
+        ownerDescription.append(ownerAvatar, ownerText);
+        ownerWrapper.append(ownerTerm, ownerDescription);
+
+        meta.append(ownerWrapper);
+        appendMetaItem(meta, "Status", status, "project-status");
+        appendMetaItem(meta, "Priority", priority, "project-priority");
+
+        const activity = document.createElement("div");
+        activity.className = "activity recent-activity project-activity";
+
+        const activityLabel = document.createElement("span");
+        activityLabel.className = "activity-label";
+        activityLabel.textContent = "Recent activity";
+
+        const activityText = document.createElement("p");
+        activityText.className = "activity-text";
+        activityText.textContent = recentActivity;
+
+        activity.append(activityLabel, activityText);
+        article.append(header, meta, activity);
+        return article;
+      }
+
+      function renderProjects(projects) {
+        clearDashboard();
+        dashboard.setAttribute("aria-busy", "false");
+
+        const cards = projects.map((project) => createProjectCard(project && typeof project === "object" ? project : {}));
+        dashboard.append(...cards);
+
+        const projectCount = projects.length;
+        const plural = projectCount === 1 ? "project" : "projects";
+        setSummary(`Showing ${projectCount} ${plural} from project-data.json.`);
+      }
+
+      async function loadProjects() {
+        showLoading();
+
+        try {
+          const response = await fetch(DATA_URL, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(`Received HTTP ${response.status} while fetching ${DATA_URL}.`);
+          }
+
+          const data = await response.json();
+          if (!data || !Array.isArray(data.projects)) {
+            showInvalidData();
+            return;
+          }
+
+          if (data.projects.length === 0) {
+            showEmptyState();
+            return;
+          }
+
+          renderProjects(data.projects);
+        } catch (error) {
+          showFetchError(error);
+        }
+      }
+
+      loadProjects();
+    </script>
+  </body>
+</html>

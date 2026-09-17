@@ -1,0 +1,46 @@
+{
+  "projects": [
+    {
+      "name": "Atlas Onboarding Refresh",
+      "owner": "Mona Kane",
+      "status": "Active",
+      "recentActivity": "Published the updated contributor checklist and merged three accessibility fixes.",
+      "priority": "High"
+    },
+    {
+      "name": "Nimbus API Migration",
+      "owner": "Ravi Patel",
+      "status": "In Progress",
+      "recentActivity": "Completed staging smoke tests and opened follow-up work for rate-limit telemetry.",
+      "priority": "Critical"
+    },
+    {
+      "name": "Beacon Insights Pilot",
+      "owner": "Lena Torres",
+      "status": "Planning",
+      "recentActivity": "Confirmed pilot metrics with customer success and drafted the first experiment brief.",
+      "priority": "Medium"
+    },
+    {
+      "name": "Harbor Documentation Cleanup",
+      "owner": "Devon Brooks",
+      "status": "Paused",
+      "recentActivity": "Paused pending final screenshots from the product walkthrough refresh.",
+      "priority": "Low"
+    },
+    {
+      "name": "Summit Release Readiness",
+      "owner": "Priya Shah",
+      "status": "Blocked",
+      "recentActivity": "Blocked on security review feedback for the release candidate dependency update.",
+      "priority": "High"
+    },
+    {
+      "name": "Orbit Feedback Loop",
+      "owner": "Noah Chen",
+      "status": "Complete",
+      "recentActivity": "Shipped the feedback digest and handed maintenance notes to the support rotation.",
+      "priority": "Medium"
+    }
+  ]
+}
